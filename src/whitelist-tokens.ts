@@ -22,16 +22,11 @@ export async function getWhitelistTokens(
     return cachedData;
   }
 
-  if (!process.env.PIKESPEAK_KEY) {
-    throw new Error("PIKESPEAK_KEY is not set");
-  }
-
   const fetchBalancesPromise = account
     ? axios
-        .get(`https://api.pikespeak.ai/account/balance/${account}`, {
+        .get(`https://api.fastnear.com/v1/account/${account}/full`, {
           headers: {
-            "Content-Type": "application/json",
-            "x-api-key": process.env.PIKESPEAK_KEY || "",
+            Authorization: `Bearer ${process.env.FASTNEAR_API_KEY}`,
           },
         })
         .then((res) => res.data)
@@ -59,22 +54,23 @@ export async function getWhitelistTokens(
     Promise.all(fetchTokenPricePromises),
   ]);
 
-  const filteredBalances = userBalances.filter(
-    (i: any) => i.symbol !== "NEAR [Storage]"
-  );
-
   // Map over tokens to include only the required fields
   const simplifiedTokens = Object.keys(tokens).map((id, index) => {
     const token = tokens[id];
     const priceData = tokenPrices[index];
 
-    const parsedBalance =
-      filteredBalances
-        .find((i: BalanceResp) => i.contract.toLowerCase() === id)
-        ?.amount.toString() || "0";
+    let balance = "0";
 
-    const balance = Big(parsedBalance)
-      .mul(Big(10).pow(token.decimals))
+    if (id === "near") {
+      balance = userBalances.state.balance;
+    } else {
+      balance =
+        userBalances.tokens
+          .find((i: BalanceResp) => i.contract_id.toLowerCase() === id)
+          ?.balance?.toString() || "0";
+    }
+    const parsedBalance = Big(balance)
+      .div(Big(10).pow(token.decimals))
       .toFixed(4);
 
     return {

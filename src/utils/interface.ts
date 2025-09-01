@@ -1,9 +1,8 @@
 import { TokenMetadata } from "./search-token";
 
 export interface BalanceResp {
-  amount: number;
-  contract: string;
-  symbol: string;
+  balance: number;
+  contract_id: string;
 }
 
 export interface Token {

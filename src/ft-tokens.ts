@@ -82,7 +82,11 @@ export async function getFTTokens(account_id: string, cache: FTCache) {
           },
         }
       ),
-      axios.get(`https://api.fastnear.com/v1/account/${account_id}/full`),
+      axios.get(`https://api.fastnear.com/v1/account/${account_id}/full`, {
+        headers: {
+          Authorization: `Bearer ${process.env.FASTNEAR_API_KEY}`,
+        },
+      }),
     ]);
 
     const nearblocksFts = nearblocksRes?.data?.inventory?.fts || [];
