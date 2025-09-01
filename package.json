@@ -8,7 +8,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
-    "test": "cross-env NODE_ENV=test jest --detectOpenHandles"
+    "test": "cross-env NODE_OPTIONS=--max-old-space-size=4096 NODE_ENV=test jest --detectOpenHandles"
   },
   "keywords": [],
   "author": "",

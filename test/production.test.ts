@@ -2,7 +2,7 @@ import axios from "axios";
 import https from "https";
 
 axios.defaults.httpsAgent = new https.Agent({ keepAlive: false });
-axios.defaults.timeout = 10_000;
+axios.defaults.timeout = 60_000; // Increase timeout to 60 seconds for CI
 
 const BASE_URL = "https://ref-sdk-api-2.fly.dev";
 
@@ -22,7 +22,8 @@ describe("Production API Status Tests", () => {
         params: { account },
       });
       expect(res.status).toBe(200);
-    }
+    },
+    60000 // 60 second timeout per test
   );
 
   test.each(accounts)(
@@ -58,7 +59,8 @@ describe("Production API Status Tests", () => {
         }
       );
       expect(res.status).toBe(200);
-    }
+    },
+    60000 // 60 second timeout for this endpoint
   );
 
   test("GET /api/near-price returns 200", async () => {

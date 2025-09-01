@@ -17,6 +17,7 @@ import prisma from "./prisma";
 import { tokens } from "./constants/tokens";
 import axios from "axios";
 import treasuryRoutes from "./routes/metrics";
+import oneclickTreasuryRoutes from "./routes/oneclick-treasury";
 import cron from "node-cron";
 
 dotenv.config();
@@ -42,6 +43,7 @@ app.use(helmet());
 app.use(express.json());
 app.use("/api/", apiLimiter);
 app.use("/", treasuryRoutes);
+app.use("/", oneclickTreasuryRoutes);
 
 const NodeCache = require("node-cache");
 const cache = new NodeCache({ stdTTL: 120 }); // Cache for 2 minutes
