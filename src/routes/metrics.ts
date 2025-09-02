@@ -324,6 +324,152 @@ async function getTreasuiresForReport() {
   }
 }
 
+function decodeUint8Array(uint8Array: number[]) {
+  const string = String.fromCharCode(...uint8Array);
+  return JSON.parse(string);
+}
+
+async function getFTLockedBalance(ftContracts: string[], daoAccount: string) {
+  try {
+    return await Promise.all(
+      ftContracts.map(async (contract) => {
+        const accountMetadataResp = await fetchFromRPC(
+          {
+            jsonrpc: "2.0",
+            id: "dontcare",
+            method: "query",
+            params: {
+              request_type: "call_function",
+              finality: "final",
+              account_id: contract,
+              method_name: "get_account",
+              args_base64: btoa(JSON.stringify({ account_id: daoAccount })),
+            },
+          },
+          false
+        );
+
+        const contractMetadataResp = await fetchFromRPC(
+          {
+            jsonrpc: "2.0",
+            id: "dontcare",
+            method: "query",
+            params: {
+              request_type: "call_function",
+              finality: "final",
+              account_id: contract,
+              method_name: "contract_metadata",
+              args_base64: "",
+            },
+          },
+          false
+        );
+        const contractMetadata = decodeUint8Array(
+          contractMetadataResp.result.result
+        );
+        const ftMetadata = await getTokenMetadata(
+          contractMetadata.token_account_id
+        );
+        const accountMetadata = decodeUint8Array(
+          accountMetadataResp.result.result
+        );
+        return {
+          contract: contract,
+          balance: Big(accountMetadata?.session_num ?? 0)
+            .mul(accountMetadata?.release_per_session ?? 0)
+            .minus(accountMetadata?.claimed_amount ?? 0)
+            .div(Big(10).pow(ftMetadata?.decimals))
+            .mul(ftMetadata?.price ?? 0)
+            .toFixed(),
+        };
+      })
+    );
+  } catch (error) {
+    console.error(`Error fetching FT locked balance for ${daoAccount}`, error);
+    return null;
+  }
+}
+
+async function getIntentsBalance(daoAccount: string) {
+  try {
+    const { data: tokensResponse } = await axios.get(
+      "https://api-mng-console.chaindefuser.com/api/tokens"
+    );
+
+    if (!tokensResponse?.items || tokensResponse.items.length === 0) {
+      return { tokens: [], totalUSD: 0 };
+    }
+
+    const initialTokens = tokensResponse.items;
+    const tokenIds = initialTokens.map((t: any) => t.defuse_asset_id);
+
+    const balancesResp = await fetchFromRPC(
+      {
+        jsonrpc: "2.0",
+        id: "dontcare",
+        method: "query",
+        params: {
+          request_type: "call_function",
+          finality: "final",
+          account_id: "intents.near",
+          method_name: "mt_batch_balance_of",
+          args_base64: btoa(
+            JSON.stringify({
+              account_id: daoAccount,
+              token_ids: tokenIds,
+            })
+          ),
+        },
+      },
+      false
+    );
+
+    if (!balancesResp?.result?.result) {
+      console.error("Failed to fetch balances from intents.near");
+      return { tokens: [], totalUSD: 0 };
+    }
+    const balances = decodeUint8Array(balancesResp.result.result);
+
+    const tokensWithBalances = initialTokens.map((token: any, i: number) => ({
+      ...token,
+      amount: balances[i] || "0",
+    }));
+
+    const filteredTokens = tokensWithBalances.filter(
+      (token: any) => token.amount && Big(token.amount).gt(0)
+    );
+
+    if (filteredTokens.length === 0) {
+      return { tokens: [], totalUSD: 0 };
+    }
+    const tokensWithMetadata = await Promise.all(
+      filteredTokens.map(async (token: any) => {
+        return {
+          ...token,
+          usdValue: Big(token.amount)
+            .div(Big(10).pow(token.decimals || 0))
+            .mul(token.price || 0)
+            .toFixed(),
+        };
+      })
+    );
+
+    // Calculate total USD value
+    const totalUSD = tokensWithMetadata.reduce(
+      (acc: Big, token: any) => Big(acc).plus(Big(token.usdValue || 0)),
+      Big(0)
+    );
+
+    return {
+      tokens: tokensWithMetadata,
+      totalUSD: totalUSD.toNumber(),
+    };
+  } catch (error) {
+    console.error("Error fetching intents balance:", error);
+    return { tokens: [], totalUSD: 0 };
+  }
+}
+
 router.get("/db/treasuries-report", async (_req, res) => {
   try {
     const treasuries = await getTreasuiresForReport();
