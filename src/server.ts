@@ -9,6 +9,7 @@ import { getSwap, SwapParams } from "./swap";
 import { getNearPrice } from "./near-price";
 import { getFTTokens } from "./ft-tokens";
 import { getAllTokenBalanceHistory } from "./all-token-balance-history";
+import { getIntentsBalanceHistory } from "./intents-graph";
 import {
   getTransactionsTransferHistory,
   TransferHistoryParams,
@@ -183,6 +184,26 @@ app.get(
     }
   }
 );
+
+app.get("/api/intents-balance-history", async (req: Request, res: Response) => {
+  const { account_id } = req.query;
+
+  if (!account_id || typeof account_id !== "string") {
+    return res.status(400).json({
+      error: "Missing required parameter: account_id",
+    });
+  }
+
+  const cacheKey = `intents:${account_id}`;
+
+  try {
+    const result = await getIntentsBalanceHistory(cache, cacheKey, account_id);
+    return res.json(result);
+  } catch (error) {
+    console.error("Unhandled error in /api/intents-balance-history:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 app.get(
   "/api/transactions-transfer-history",
