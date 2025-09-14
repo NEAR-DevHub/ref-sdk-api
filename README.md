@@ -1,6 +1,6 @@
-# NEAR Token Swap API
+# NEAR Treasury & Token API
 
-A RESTful API service for token swaps and blockchain metadata on the NEAR network, built with Express.js and TypeScript. It leverages caching, rate limiting, and secure request handling to provide a robust service for interacting with NEAR blockchain data.
+A comprehensive RESTful API service for NEAR blockchain interactions, treasury management, token operations, and validator information. Built with Express.js and TypeScript, featuring robust caching, rate limiting, and secure request handling.
 
 ---
 
@@ -12,223 +12,335 @@ A RESTful API service for token swaps and blockchain metadata on the NEAR networ
 - [Environment Variables](#environment-variables)
 - [Running the Server](#running-the-server)
 - [API Endpoints](#api-endpoints)
-  - [Get Token Metadata](#get-token-metadata)
-  - [Whitelist Tokens](#whitelist-tokens)
-  - [Token Swap](#token-swap)
-  - [Get NEAR Price](#get-near-price)
-  - [Fetch FT Tokens](#fetch-ft-tokens)
-  - [Get All Token Balance History](#get-all-token-balance-history)
-  - [Clear Token Balance History](#clear-token-balance-history)
-  - [Transactions Transfer History](#transactions-transfer-history)
+  - [Token Operations](#token-operations)
+  - [Balance & History](#balance--history)
+  - [Treasury Management](#treasury-management)
+  - [Validator Information](#validator-information)
+  - [Search & Discovery](#search--discovery)
+  - [OneClick Treasury](#oneclick-treasury)
 - [Caching & Rate Limiting](#caching--rate-limiting)
-- [RPC Requests & Fallback Logic](#rpc-requests--fallback-logic)
+- [Testing](#testing)
 - [License](#license)
 
 ---
 
 ## Features
 
-- **Token Metadata Retrieval:** Get metadata for any token from a pre-defined list.
-- **Whitelist Tokens:** Retrieve tokens with associated balances and prices for a given account.
-- **Token Swap Functionality:** Execute swap operations with validation and default slippage.
-- **NEAR Price Retrieval:** Fetch the NEAR token price via external APIs with a database fallback.
-- **FT Tokens Endpoint:** Retrieve fungible token balances with caching.
-- **Token Balance History:** Get historical balance data bundled by period.
-- **Clear Balance History:** Delete all token balance history entries from the database.
-- **Transactions Transfer History:** Retrieve transfer history information from transactions.
-- **Rate Limiting & CORS:** Protect endpoints using rate limits and CORS.
-- **Security:** Utilize Helmet for secure HTTP headers.
-- **RPC Caching:** Use internal caching and fallback mechanisms for RPC requests.
+- **Token Operations:** Swap tokens, fetch metadata, prices, and balances
+- **Balance History:** Historical token balance tracking with multiple time periods
+- **Treasury Management:** DAO treasury analytics, reports, and transaction history
+- **Validator Information:** Current validators list and detailed validator data
+- **Search & Discovery:** Search for tokens and discover user DAOs
+- **OneClick Treasury:** Simplified treasury proposal creation for cross-chain operations
+- **Intents Balance History:** Track token balances held through intents contracts
+- **Security & Performance:** Rate limiting, CORS, caching, and secure HTTP headers
+- **Database Integration:** PostgreSQL with Prisma ORM for data persistence
 
 ---
 
 ## Requirements
 
-- [Node.js](https://nodejs.org/en/) (v14+ recommended)
+- [Node.js](https://nodejs.org/en/) (v16+ recommended)
 - [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
-- A running PostgreSQL database instance
+- PostgreSQL database instance
+- API keys for external services (NEARBLOCKS, FASTNEAR, PIKESPEAK)
 
 ---
 
 ## Installation
 
 1. **Clone the repository:**
-
    ```bash
-   git clone https://github.com/your-username/near-token-swap-api.git
-   cd near-token-swap-api
+   git clone https://github.com/your-username/ref-sdk-api.git
+   cd ref-sdk-api
    ```
 
 2. **Install dependencies:**
-
    ```bash
-   npm install
+   yarn install
    ```
 
 3. **Setup environment variables:**
-
-   Copy the provided `.env.example` file to `.env` and configure the variables accordingly.
-
    ```bash
    cp .env.example .env
+   # Edit .env with your configuration
    ```
 
-4. **Run migrations (if using Prisma):**
-
+4. **Run database migrations:**
    ```bash
-   npx prisma migrate dev
+   npx prisma migrate deploy
+   npx prisma generate
    ```
 
 ---
 
 ## Environment Variables
 
-Ensure you have a `.env` file with the following variables configured:
-
-```
+```env
 HOSTNAME=127.0.0.1
 PORT=3000
-PIKESPEAK_KEY=
-DATABASE_URL="postgresql://johndoe:randompassword@localhost:5432/mydb?schema=public"
-FASTNEAR_API_KEY=
-NEARBLOCKS_API_KEY=
+DATABASE_URL="postgresql://user:password@localhost:5432/ref_sdk_api?schema=public"
+NEARBLOCKS_API_KEY=your_nearblocks_api_key
+FASTNEAR_API_KEY=your_fastnear_api_key
+PIKESPEAK_KEY=your_pikespeak_api_key
 ```
 
 ---
 
 ## Running the Server
 
-Start the server with:
-
 ```bash
-npm start
+# Development
+yarn dev
+
+# Production
+yarn build
+yarn start
 ```
 
-By default, the server will run on `http://127.0.0.1:3000` (or as specified by the `HOSTNAME` and `PORT` variables).
+Server runs on `http://127.0.0.1:3000` by default.
 
 ---
 
 ## API Endpoints
 
-### Whitelist Tokens
+### Token Operations
 
+#### Get Whitelist Tokens
 - **Endpoint:** `GET /api/whitelist-tokens`
-- **Optional Query Parameter:**
-  - `account` (string): The NEAR account id to filter tokens.
-- **Response:** JSON object containing whitelisted tokens along with balances and prices.
+- **Description:** Returns whitelisted tokens with balances and prices for a specific account
+- **Query Parameters:**
+  - `account` (string, optional): NEAR account ID to fetch token balances for
+- **Response:** Array of token objects with balance and price information
 - **Example:**
-
   ```http
   GET /api/whitelist-tokens?account=example.near
   ```
 
----
-
-### Token Swap
-
+#### Token Swap
 - **Endpoint:** `GET /api/swap`
-- **Required Query Parameters:**
-  - `accountId` (string): The account executing the swap.
-  - `tokenIn` (string): The ID of the token to swap from.
-  - `tokenOut` (string): The token to swap to.
-  - `amountIn` (string): The amount of `tokenIn` being swapped.
-- **Optional Query Parameter:**
-  - `slippage` (string): The allowable slippage (default: "0.01" for 1%).
-- **Response:** JSON object containing swap details or error information.
+- **Description:** Generate swap transactions for token exchanges
+- **Query Parameters:**
+  - `accountId` (string, required): Account executing the swap
+  - `tokenIn` (string, required): Input token contract ID
+  - `tokenOut` (string, required): Output token contract ID  
+  - `amountIn` (string, required): Amount of input token (in smallest units)
+  - `slippage` (string, optional): Slippage tolerance (default: "0.01" for 1%)
+- **Response:** Swap transaction details and estimated output
 - **Example:**
-
   ```http
-  GET /api/swap?accountId=example.near&tokenIn=near&tokenOut=usdt&amountIn=100&slippage=0.02
+  GET /api/swap?accountId=example.near&tokenIn=wrap.near&tokenOut=usdt.tether-token.near&amountIn=1000000000000000000000000&slippage=0.01
   ```
 
----
-
-### Get NEAR Price
-
+#### Get NEAR Price
 - **Endpoint:** `GET /api/near-price`
-- **Description:** Retrieves the current NEAR token price. If external sources fail, it falls back to the latest price stored in the database.
-- **Response:** NEAR price as a JSON value.
+- **Description:** Current NEAR token price in USD with database fallback
+- **Response:** Number (price in USD)
 - **Example:**
-
   ```http
   GET /api/near-price
   ```
 
----
-
-### Fetch FT Tokens
-
-- **Endpoint:** `GET /api/ft-tokens`
+#### Get FT Token Price
+- **Endpoint:** `GET /api/ft-token-price`
+- **Description:** Get price for a specific fungible token
 - **Query Parameters:**
-  - `account_id` (string, required): The account id to fetch fungible token information.
-- **Response:** JSON object with FT token details.
+  - `account_id` (string, required): Token contract ID (use "near" for NEAR token)
+- **Response:** Object with price information
 - **Example:**
+  ```http
+  GET /api/ft-token-price?account_id=wrap.near
+  ```
 
+#### Get FT Token Metadata
+- **Endpoint:** `GET /api/ft-token-metadata`
+- **Description:** Fetch metadata for a fungible token
+- **Query Parameters:**
+  - `account_id` (string, required): Token contract ID (use "near" for NEAR token)
+- **Response:** Token metadata object (name, symbol, decimals, icon, etc.)
+- **Example:**
+  ```http
+  GET /api/ft-token-metadata?account_id=wrap.near
+  ```
+
+#### Get FT Tokens
+- **Endpoint:** `GET /api/ft-tokens`
+- **Description:** Get all fungible tokens held by an account with metadata and USD values
+- **Query Parameters:**
+  - `account_id` (string, required): NEAR account ID
+- **Response:** Object with total USD value and array of tokens with metadata
+- **Example:**
   ```http
   GET /api/ft-tokens?account_id=example.near
   ```
 
----
+### Balance & History
 
-### Get All Token Balance History
-
+#### Get Token Balance History
 - **Endpoint:** `GET /api/all-token-balance-history`
+- **Description:** Historical balance data for a specific token across multiple time periods
 - **Query Parameters:**
-  - `account_id` (string, required): The account id whose token balance history is to be fetched.
-  - `token_id` (string, required): The token id for which balance history is required.
-  - `disableCache` (optional): When provided, bypasses the cached result (note: sensitive to frequent requests).
-- **Response:** JSON object mapping each period to its corresponding balance history.
+  - `account_id` (string, required): NEAR account ID
+  - `token_id` (string, required): Token contract ID
+- **Response:** Object mapping time periods to balance history arrays
 - **Example:**
-
   ```http
-  GET /api/all-token-balance-history?account_id=example.near&token_id=near
-  GET /api/all-token-balance-history?account_id=example.near&token_id=near&disableCache=true
+  GET /api/all-token-balance-history?account_id=example.near&token_id=wrap.near
   ```
 
----
-
-### Transactions Transfer History
-
-- **Endpoint:** `GET /api/transactions-transfer-history`
+#### Get Intents Balance History
+- **Endpoint:** `GET /api/intents-balance-history`
+- **Description:** Historical balance data for tokens held through intents contracts
 - **Query Parameters:**
-  - `treasuryDaoID` (string, required): The treasury DAO ID to filter transfer transactions.
-- **Response:** JSON object containing the transfer history data.
+  - `account_id` (string, required): NEAR account ID
+- **Response:** Object mapping time periods to intents token balance history
 - **Example:**
-
   ```http
-  GET /api/transactions-transfer-history?treasuryDaoID=dao.near
+  GET /api/intents-balance-history?account_id=example.near
+  ```
+
+### Treasury Management
+
+#### Get Transactions Transfer History
+- **Endpoint:** `GET /api/transactions-transfer-history`
+- **Description:** Transfer transaction history for a treasury DAO
+- **Query Parameters:**
+  - `treasuryDaoID` (string, required): Treasury DAO contract ID
+- **Response:** Object containing transfer history data
+- **Example:**
+  ```http
+  GET /api/transactions-transfer-history?treasuryDaoID=example.sputnik-dao.near
+  ```
+
+#### Store Treasuries
+- **Endpoint:** `GET /db/store-treasuries`
+- **Description:** Fetch and store treasury data from factory contract
+- **Response:** Success message with operation results
+
+#### Insert Treasury
+- **Endpoint:** `POST /db/insert-treasury`
+- **Description:** Manually insert treasury data
+- **Body:** Treasury object or array of treasury objects
+- **Response:** Operation results for each treasury
+
+#### Treasuries Report
+- **Endpoint:** `GET /db/treasuries-report`
+- **Description:** Generate comprehensive treasury analytics report
+- **Response:** Treasury metrics and Google Sheets update status
+
+#### Treasuries Transactions Report
+- **Endpoint:** `GET /db/treasuries-transactions-report`
+- **Description:** Generate treasury transaction analytics report
+- **Response:** Transaction metrics and Google Sheets update status
+
+### Validator Information
+
+#### Get Validators
+- **Endpoint:** `GET /api/validators`
+- **Description:** List of current NEAR validators with formatted fee information
+- **Response:** Array of validator objects with pool_id and fee percentage
+- **Example:**
+  ```http
+  GET /api/validators
+  ```
+
+#### Get Validator Details
+- **Endpoint:** `GET /api/validator-details`
+- **Description:** Detailed information for a specific validator
+- **Query Parameters:**
+  - `account_id` (string, required): Validator account ID
+- **Response:** Detailed validator information object
+- **Example:**
+  ```http
+  GET /api/validator-details?account_id=validator.near
+  ```
+
+### Search & Discovery
+
+#### Search FT Tokens
+- **Endpoint:** `GET /api/search-ft`
+- **Description:** Search for fungible tokens by name or symbol
+- **Query Parameters:**
+  - `query` (string, required): Search term
+- **Response:** First matching token object
+- **Example:**
+  ```http
+  GET /api/search-ft?query=near
+  ```
+
+#### Get User DAOs
+- **Endpoint:** `GET /api/user-daos`
+- **Description:** List of DAOs that a user is a member of
+- **Query Parameters:**
+  - `account_id` (string, required): NEAR account ID
+- **Response:** Array of DAO contract IDs
+- **Example:**
+  ```http
+  GET /api/user-daos?account_id=example.near
+  ```
+
+### OneClick Treasury
+
+#### OneClick Quote
+- **Endpoint:** `POST /api/treasury/oneclick-quote`
+- **Description:** Generate treasury proposal for cross-chain token operations
+- **Body Parameters:**
+  - `treasuryDaoID` (string, required): Treasury DAO contract ID (must end with .sputnik-dao.near)
+  - `inputToken` (object, required): Input token details
+  - `outputToken` (object, required): Output token details  
+  - `amountIn` (string, required): Input amount
+  - `slippageTolerance` (string, required): Slippage tolerance
+  - `networkOut` (string, optional): Output network
+- **Response:** Formatted proposal payload for DAO submission
+- **Example:**
+  ```http
+  POST /api/treasury/oneclick-quote
+  Content-Type: application/json
+  
+  {
+    "treasuryDaoID": "example.sputnik-dao.near",
+    "inputToken": {"id": "wrap.near", "symbol": "WNEAR"},
+    "outputToken": {"id": "usdc", "blockchain": "ethereum"},
+    "amountIn": "1000000000000000000000000",
+    "slippageTolerance": "100"
+  }
   ```
 
 ---
 
 ## Caching & Rate Limiting
 
-- **Caching:**
+### Caching
+- **NodeCache:** 2-minute TTL for most endpoints
+- **Specialized caching:** Longer TTL for validator data (7 days) and search results (1 day)
+- **RPC caching:** Request-based caching with error handling for rate limits
 
-  - The API uses [NodeCache](https://www.npmjs.com/package/node-cache) to store short-term responses (e.g., NEAR prices and token balance histories) to reduce external API calls and recomputation.
-  - RPC calls (in `src/utils/fetch-from-rpc.ts`) also cache responses and skip endpoints temporarily on rate-limited (HTTP 429) responses.
-
-- **Rate Limiting:**
-  - All `/api/*` endpoints are limited to 180 requests per 30 seconds per IP (or forwarded IP when available).
-  - This helps protect against abuse and ensures service stability.
+### Rate Limiting
+- **Limit:** 180 requests per 30 seconds per IP
+- **Scope:** All `/api/*` endpoints
+- **Headers:** Standard rate limit headers included in responses
 
 ---
 
-## RPC Requests & Fallback Logic
+## Testing
 
-- The API makes use of multiple RPC endpoints for querying the NEAR blockchain.
-- In `src/utils/fetch-from-rpc.ts`, the request is:
-  - Cached based on a hash of the request body.
-  - Attempted sequentially across a list of primary or archival endpoints.
-  - The response is stored using Prisma if successful.
-  - In the event of a known error (e.g., non-existent account), the system caches the fact to avoid unnecessary calls.
+```bash
+# Run all tests
+yarn test
+
+# Run specific test suites
+yarn test test/server.test.ts                    # Unit tests (mocked)
+yarn test test/server.integration.test.ts       # Integration tests (local)
+yarn test test/intents-graph.test.ts           # Intents unit tests
+yarn test test/intents-graph.integration.test.ts # Intents integration tests
+```
 
 ---
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for more details.
+MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-_For additional questions or contributions, please open an issue or submit a PR on GitHub._
+_For questions or contributions, please open an issue or submit a PR on GitHub._
