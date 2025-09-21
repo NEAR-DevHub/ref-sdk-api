@@ -6,3 +6,25 @@ export const periodMap = [
   { period: "1H", value: 1, interval: 6 }, // 1 point per 10 minutes
   { period: "All", value: 24 * 365 * 2, interval: 20 }, // assuming 2 years of chain history
 ];
+
+export const WrapNearIcon =
+  "https://img.rhea.finance/images/w-NEAR-no-border.png";
+
+export const NearIcon = "https://img.rhea.finance/images/NEARIcon.png";
+
+export const NearTokenMetadata = {
+  contract: "near",
+  spec: "ft-1.0.0",
+  name: "NEAR",
+  symbol: "NEAR",
+  icon: NearIcon,
+  reference: "",
+  reference_hash: "",
+  decimals: 24,
+  price: null,
+  total_supply: "0",
+  onchain_market_cap: "0",
+  change_24: "0",
+  market_cap: "0",
+  volume_24h: "0",
+};

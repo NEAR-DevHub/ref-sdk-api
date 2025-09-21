@@ -1,7 +1,6 @@
-import { searchToken } from "./utils/search-token";
 import Big from "big.js";
 import { SmartRouter } from "./utils/interface";
-import { swapFromServer, unWrapNear, wrapNear } from "./utils/lib";
+import { searchFT, swapFromServer, unWrapNear, wrapNear } from "./utils/lib";
 import axios from "axios";
 
 export type SwapParams = {
@@ -12,18 +11,18 @@ export type SwapParams = {
   slippage: string;
 };
 
-export async function getSwap({
-  accountId,
-  tokenIn,
-  tokenOut,
-  amountIn,
-  slippage,
-}: SwapParams) {
+export async function getSwap(
+  { accountId, tokenIn, tokenOut, amountIn, slippage }: SwapParams,
+  cache: {
+    get: (key: string) => any;
+    set: (key: string, value: any, ttl: number) => void;
+  }
+) {
   try {
     const isWrapNearInputToken = tokenIn === "wrap.near";
     const isWrapNearOutputToken = tokenOut === "wrap.near";
-    const tokenInData = await searchToken(tokenIn);
-    const tokenOutData = await searchToken(tokenOut);
+    const tokenInData = await searchFT(tokenIn, cache);
+    const tokenOutData = await searchFT(tokenOut, cache);
 
     if (!tokenInData || !tokenOutData) {
       throw new Error(
@@ -32,7 +31,7 @@ export async function getSwap({
     }
 
     // (un)wrap NEAR
-    if (tokenInData.id === tokenOutData.id) {
+    if (tokenInData.contract === tokenOutData.contract) {
       if (isWrapNearInputToken && !isWrapNearOutputToken) {
         return {
           transactions: [await unWrapNear({ amountIn })],
@@ -55,7 +54,7 @@ export async function getSwap({
     let swapRes: SmartRouter;
     try {
       const response = await axios.get(
-        `https://smartrouter.ref.finance/findPath?amountIn=${sendAmount}&tokenIn=${tokenInData.id}&tokenOut=${tokenOutData.id}&pathDeep=3&slippage=${slippage}`
+        `https://smartrouter.ref.finance/findPath?amountIn=${sendAmount}&tokenIn=${tokenInData.contract}&tokenOut=${tokenOutData.contract}&pathDeep=3&slippage=${slippage}`
       );
       swapRes = response.data;
     } catch (error) {

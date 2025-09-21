@@ -15,11 +15,11 @@ import {
   TransferHistoryParams,
 } from "./transactions-transfer-history";
 import prisma from "./prisma";
-import { tokens } from "./constants/tokens";
 import axios from "axios";
 import treasuryRoutes from "./routes/metrics";
 import oneclickTreasuryRoutes from "./routes/oneclick-treasury";
 import cron from "node-cron";
+import { searchFT } from "./utils/lib";
 
 dotenv.config();
 
@@ -84,7 +84,7 @@ app.get("/api/swap", async (req: Request, res: Response) => {
       params.slippage = "0.01"; // 1% default slippage
     }
 
-    const result = await getSwap(params);
+    const result = await getSwap(params, cache);
     return res.json(result);
   } catch (error) {
     console.error("Error in /api/swap:", error);
@@ -399,29 +399,14 @@ app.get("/api/search-ft", async (req: Request, res: Response) => {
     const { query } = req.query;
 
     if (!query || typeof query !== "string") {
-      return res.status(400).send({ error: "query is required" });
-    }
-    const cacheKey = `search-ft-${query}`;
-
-    const cachedSearchedFt = cache.get(cacheKey);
-    if (cachedSearchedFt !== undefined) {
-      console.log(`🔁 Returning cached FT ${query}`);
-      return res.send(cachedSearchedFt);
+      return res.status(400).json({ error: "query is required" });
     }
 
-    const { data } = await axios.get(
-      `https://api.nearblocks.io/v1/fts/?search=${query}`,
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.NEARBLOCKS_API_KEY}`,
-        },
-      }
-    );
-    const searchedFt = data?.tokens?.[0];
-    cache.set(cacheKey, searchedFt, 60 * 60 * 24); // 1 day
+    const searchedFt = await searchFT(query, cache);
     return res.send(searchedFt);
   } catch (error) {
     console.error("Error searching FT:", error);
+        
     return res.status(500).send({ error: "Failed to search FT" });
   }
 });

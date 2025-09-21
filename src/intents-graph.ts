@@ -1,6 +1,6 @@
 import { fetchFromRPC } from "./utils/fetch-from-rpc";
 import prisma from "./prisma";
-import { periodMap } from "./constants/period-map";
+import { periodMap } from "./constants/common";
 import axios from "axios";
 import Big from "big.js";
 import {

@@ -1,5 +1,3 @@
-import { TokenMetadata } from "./search-token";
-
 export interface BalanceResp {
   balance: number;
   contract_id: string;
@@ -24,11 +22,36 @@ export interface IServerPool {
   token_out: string;
 }
 
+export interface NearBlockTokenMetadata {
+  contract: string;
+  name: string;
+  symbol: string;
+  decimals: number;
+  icon: string;
+  reference: string | null;
+  price: string | null;
+  total_supply: string;
+  onchain_market_cap: string;
+  change_24: string;
+  market_cap: string;
+  volume_24h: string;
+}
+
+export interface RefFinanceTokenMetadata {
+  spec: string;
+  name: string;
+  symbol: string;
+  icon: string;
+  reference: string;
+  reference_hash: string;
+  decimals: number;
+}
+
 export interface IServerRoute {
   amount_in: string;
   min_amount_out: string;
   pools: IServerPool[];
-  tokens?: TokenMetadata[];
+  tokens?: RefFinanceTokenMetadata[];
 }
 
 export interface IEstimateSwapServerView {
@@ -42,8 +65,8 @@ export interface IEstimateSwapServerView {
 
 export interface SwapOptions {
   useNearBalance?: boolean;
-  tokenIn: TokenMetadata;
-  tokenOut: TokenMetadata;
+  tokenIn: NearBlockTokenMetadata;
+  tokenOut: NearBlockTokenMetadata;
   amountIn: string;
   slippageTolerance?: number;
   accountId: string;

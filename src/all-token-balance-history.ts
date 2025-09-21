@@ -1,8 +1,7 @@
 import { fetchFromRPC } from "./utils/fetch-from-rpc";
 import { convertFTBalance } from "./utils/convert-ft-balance";
 import prisma from "./prisma";
-import { tokens } from "./constants/tokens";
-import { periodMap } from "./constants/period-map";
+import { NearTokenMetadata, periodMap } from "./constants/common";
 import { getUserStakeBalances } from "./utils/lib";
 import {
   BLOCKS_PER_HOUR,
@@ -25,10 +24,12 @@ export async function getAllTokenBalanceHistory(
 ): Promise<Record<string, BalanceHistoryEntry[]>> {
   let rpcCallCount = 0;
 
-  const token = tokens[token_id as keyof typeof tokens];
-  let decimals = token?.decimals || 24;
+  let decimals =
+    token_id === "near" || token_id === "wrap.near"
+      ? NearTokenMetadata.decimals
+      : 0;
 
-  if (!token?.decimals) {
+  if (!decimals) {
     try {
       const tokenDetails = await fetchFromRPC(
         {
