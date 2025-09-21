@@ -89,5 +89,26 @@
     "createdBy": "manual",
     "instanceAccount": "treasury-near-india.near",
     "daoAccount": "near-india.sputnik-dao.near"
+  },
+  {
+    "name": "ref-finance",
+    "createdAt": "2025-08-29T12:00:00Z",
+    "createdBy": "manual",
+    "instanceAccount": "treasury-ref-finance.near",
+    "daoAccount": "ref-finance.sputnik-dao.near"
+  },
+  {
+    "name": "ref-community-board",
+    "createdAt": "2025-08-29T12:00:00Z",
+    "createdBy": "manual",
+    "instanceAccount": "treasury-ref-community-board.near",
+    "daoAccount": "ref-community-board.sputnik-dao.near"
+  },
+  {
+    "name": "daocubator",
+    "createdAt": "2025-09-21T12:00:00Z",
+    "createdBy": "manual",
+    "instanceAccount": "treasury-daocubator.near",
+    "daoAccount": "daocubator.sputnik-dao.near"
   }
 ]
