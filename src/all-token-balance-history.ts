@@ -4,53 +4,12 @@ import prisma from "./prisma";
 import { tokens } from "./constants/tokens";
 import { periodMap } from "./constants/period-map";
 import { getUserStakeBalances } from "./utils/lib";
-
-const BLOCKS_PER_HOUR = 3200;
-
-function formatLabel(timestamp: number, period: string): string {
-  const date = new Date(timestamp);
-  switch (period) {
-    case "1Y":
-      return date.toLocaleDateString("en-US", {
-        month: "short",
-        year: "numeric",
-      });
-
-    case "1M":
-      return date.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      });
-
-    case "1W":
-      return date.toLocaleDateString("en-US", {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-      });
-
-    case "1D":
-      return date.toLocaleString("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        hour12: true,
-      });
-
-    case "1H":
-      return date.toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      });
-
-    default:
-      return date.toLocaleDateString("en-US", {
-        month: "short",
-        year: "numeric",
-      });
-  }
-}
+import {
+  BLOCKS_PER_HOUR,
+  formatLabel,
+  groupByPeriod,
+  BalanceHistoryCache,
+} from "./utils/balance-history-common";
 
 type BalanceHistoryEntry = {
   timestamp: number;
@@ -58,27 +17,8 @@ type BalanceHistoryEntry = {
   balance: string;
 };
 
-type AllTokenBalanceHistoryCache = {
-  get: (key: string) => any;
-  set: (key: string, value: any, ttl?: number) => void;
-  del: (key: string) => void;
-};
-
-const groupByPeriod = (history: BalanceHistoryEntry[]) => {
-  const grouped = new Map<string, BalanceHistoryEntry>();
-
-  for (const entry of history) {
-    const key = entry.date;
-    if (!grouped.has(key) || entry.timestamp > grouped.get(key)!.timestamp) {
-      grouped.set(key, entry);
-    }
-  }
-
-  return Object.fromEntries(grouped);
-};
-
 export async function getAllTokenBalanceHistory(
-  cache: AllTokenBalanceHistoryCache,
+  cache: BalanceHistoryCache,
   cacheKey: string,
   account_id: string,
   token_id: string

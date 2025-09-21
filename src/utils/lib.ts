@@ -319,16 +319,15 @@ export async function getUserStakeBalances(
   );
 
   const { data: stakingData } = await axios.get(
-    `https://staking-pools-api.neartreasury.com/v1/account/${account_id}/staking`,
-    
+    `https://staking-pools-api.neartreasury.com/v1/account/${account_id}/staking`
   );
 
   // Combine pools from both API calls and get unique pool IDs
   const fastnearPools = (data?.pools ?? []).map((i: any) => i.pool_id);
   const treasuryPools = (stakingData?.pools ?? []).map((i: any) => i.pool_id);
-  
+
   const uniqueStakedPools = [...new Set([...fastnearPools, ...treasuryPools])];
-  
+
   const results: number[] = new Array(blockHeights.length).fill(0); // Store total balance per blockHeight
 
   await Promise.all(
