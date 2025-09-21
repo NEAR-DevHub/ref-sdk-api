@@ -59,15 +59,7 @@ export async function getIntentsBalanceHistory(
     rpcCallCount++;
     const currentBlock = currentBlockData.result.header.height;
 
-    // Get token metadata
-    const tokensMetadata = await getTokensMetadata();
-    const tokenMetadataMap = new Map(
-      tokensMetadata.map((token: any) => [token.defuse_asset_id, token])
-    );
-    const allTokenIds = tokensMetadata.map((t: any) => t.defuse_asset_id);
-
-    // First check if the account has any intents tokens right now
-    const currentBalancesResp = await fetchFromRPC(
+    const tokensAccountHoldResp = await fetchFromRPC(
       {
         jsonrpc: "2.0",
         id: "dontcare",
@@ -76,11 +68,10 @@ export async function getIntentsBalanceHistory(
           request_type: "call_function",
           finality: "final",
           account_id: INTENTS_CONTRACT_ID,
-          method_name: "mt_batch_balance_of",
+          method_name: "mt_tokens_for_owner",
           args_base64: Buffer.from(
             JSON.stringify({
               account_id,
-              token_ids: allTokenIds,
             })
           ).toString("base64"),
         },
@@ -88,28 +79,25 @@ export async function getIntentsBalanceHistory(
       false
     );
 
-    if (!currentBalancesResp?.result?.result) {
+    if (!tokensAccountHoldResp?.result?.result) {
       console.log(`Account ${account_id} has no intents tokens`);
       return {}; // Return empty result if no tokens
     }
 
-    const currentBalances = decodeUint8Array(currentBalancesResp.result.result);
-    if (!currentBalances) {
-      console.log(`Failed to decode current balances for ${account_id}`);
-      return {};
-    }
-
-    // Check if any balance is greater than 0
-    const hasAnyTokens = currentBalances.some(
-      (balance: string) => balance && Big(balance).gt(0)
+    const tokensAccountHold = decodeUint8Array(
+      tokensAccountHoldResp.result.result
     );
 
-    if (!hasAnyTokens) {
-      console.log(
-        `Account ${account_id} has zero balance in all intents tokens`
-      );
-      return {};
+    if (tokensAccountHold.length === 0) {
+      console.log(`Account ${account_id} has no intents tokens`);
+      return {}; // Return empty result if no tokens
     }
+
+    // Get token metadata
+    const tokensMetadata = await getTokensMetadata();
+    const tokenMetadataMap = new Map(
+      tokensMetadata.map((token: any) => [token.defuse_asset_id, token])
+    );
 
     console.log(
       `Account ${account_id} has intents tokens, fetching historical data...`
@@ -189,14 +177,14 @@ export async function getIntentsBalanceHistory(
           })
         );
 
-        // For each block, we'll check balances for all known tokens
-        const tokensByBlock = blockHeights.map(() => allTokenIds);
+        // For each block, we'll check balances for tokens the account holds
+        const tokensByBlock = blockHeights.map(() => tokensAccountHold);
 
         // Get balances for all tokens at each block height
         const balancesByBlock = await Promise.all(
           blockHeights.map(async (block_id, index) => {
-            const tokenIds = tokensByBlock[index];
-            if (!tokenIds || tokenIds.length === 0) {
+            const tokensForBlock = tokensByBlock[index];
+            if (!tokensForBlock || tokensForBlock.length === 0) {
               return [];
             }
 
@@ -215,7 +203,7 @@ export async function getIntentsBalanceHistory(
                     args_base64: Buffer.from(
                       JSON.stringify({
                         account_id,
-                        token_ids: tokenIds,
+                        token_ids: tokensForBlock.map((t: any) => t.token_id),
                       })
                     ).toString("base64"),
                   },
@@ -231,23 +219,24 @@ export async function getIntentsBalanceHistory(
               if (!balances) return [];
 
               // Combine token IDs with their balances and metadata
-              return tokenIds
-                .map((token_id: string, i: number) => {
+              return tokensForBlock
+                .map((tokenInfo: any, i: number) => {
                   const balance = balances[i] || "0";
+                  const token_id = tokenInfo.token_id;
                   const tokenMeta = tokenMetadataMap.get(token_id) as any;
 
-                  if (!tokenMeta || Big(balance).eq(0)) {
-                    return null; // Filter out tokens with no metadata or zero balance
+                  if (Big(balance).eq(0)) {
+                    return null; // Filter out tokens with zero balance
                   }
 
                   const parsedBalance = Big(balance)
-                    .div(Big(10).pow(tokenMeta.decimals || 0))
+                    .div(Big(10).pow(tokenMeta?.decimals || 0))
                     .toFixed();
 
                   return {
                     token_id,
-                    symbol: tokenMeta.symbol || tokenMeta.name || token_id,
-                    icon: tokenMeta.icon || tokenMeta.image,
+                    symbol: tokenMeta?.symbol || tokenMeta?.name || token_id,
+                    icon: tokenMeta?.icon || tokenMeta?.image,
                     balance,
                     parsedBalance,
                   };

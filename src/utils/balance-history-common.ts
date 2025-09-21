@@ -2,17 +2,21 @@ export const BLOCKS_PER_HOUR = 3200;
 
 export function formatLabel(timestamp: number, period: string): string {
   const date = new Date(timestamp);
+  const timeZone = "UTC";
+  // All dates formatted in UTC timezone
   switch (period) {
     case "1Y":
       return date.toLocaleDateString("en-US", {
         month: "short",
         year: "numeric",
+        timeZone: timeZone,
       });
 
     case "1M":
       return date.toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
+        timeZone: timeZone,
       });
 
     case "1W":
@@ -20,6 +24,7 @@ export function formatLabel(timestamp: number, period: string): string {
         weekday: "short",
         month: "short",
         day: "numeric",
+        timeZone: timeZone,
       });
 
     case "1D":
@@ -28,19 +33,24 @@ export function formatLabel(timestamp: number, period: string): string {
         day: "numeric",
         hour: "numeric",
         hour12: true,
+        timeZone: timeZone,
       });
 
     case "1H":
-      return date.toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      });
+      return (
+        date.toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+          timeZone: timeZone,
+        }) + " UTC"
+      );
 
     default:
       return date.toLocaleDateString("en-US", {
         month: "short",
         year: "numeric",
+        timeZone: timeZone,
       });
   }
 }
