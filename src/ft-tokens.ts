@@ -1,7 +1,7 @@
 import axios from "axios";
 import Big from "big.js";
 import prisma from "./prisma";
-import { tokens } from "./constants/tokens";
+import { WrapNearIcon } from "./constants/common";
 
 type FTCache = {
   get: (key: string) => any;
@@ -135,10 +135,7 @@ export async function getFTTokens(account_id: string, cache: FTCache) {
 
     const finalFts = sorted.map((ft) => {
       const isWrapped = ft.contract === "wrap.near";
-      const icon =
-        ft.ft_meta.icon ||
-        (isWrapped ? tokens[ft.contract]?.icon : undefined) ||
-        tokens[ft.contract]?.icon;
+      const icon = ft.ft_meta.icon || (isWrapped ? WrapNearIcon : undefined);
       return {
         ...ft,
         ft_meta: {

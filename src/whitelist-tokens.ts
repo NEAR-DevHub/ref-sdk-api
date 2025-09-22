@@ -1,12 +1,68 @@
 import Big from "big.js";
 import axios from "axios";
 import { BalanceResp } from "./utils/interface";
-import { tokens } from "./constants/tokens";
+import { NearIcon, NearTokenMetadata, WrapNearIcon } from "./constants/common";
+import { fetchFromRPC } from "./utils/fetch-from-rpc";
+import { decodeUint8Array } from "./utils/balance-history-common";
 
 type WhitelistTokensCache = {
   get: (key: string) => any;
   set: (key: string, value: any, ttl: number) => void;
 };
+
+async function fetchRefFinanceTokens(
+  cache: WhitelistTokensCache
+): Promise<Record<string, any>> {
+  const cacheKey = "ref-finance-tokens";
+
+  // Return cached data if it exists
+  const cachedData = cache.get(cacheKey);
+  if (cachedData) {
+    return cachedData;
+  }
+
+  // Get whitelisted tokens from RPC
+  const whitelistTokensResp = await fetchFromRPC(
+    {
+      jsonrpc: "2.0",
+      id: "dontcare",
+      method: "query",
+      params: {
+        request_type: "call_function",
+        account_id: "v2.ref-finance.near",
+        method_name: "get_whitelisted_tokens",
+        args_base64: "",
+        finality: "final",
+      },
+    },
+    false,
+    false
+  );
+
+  const whitelistTokens = whitelistTokensResp?.result?.result;
+  const whitelistTokensArray = decodeUint8Array(whitelistTokens);
+
+  const whitelistSet = new Set(whitelistTokensArray);
+
+  try {
+    const response = await axios.get("https://api.ref.finance/list-token");
+    const allRefTokens = response.data;
+
+    // Filter Ref Finance tokens to only include whitelisted ones
+    const filteredTokens: Record<string, any> = {};
+    for (const tokenId in allRefTokens) {
+      if (whitelistSet.has(tokenId)) {
+        filteredTokens[tokenId] = allRefTokens[tokenId];
+      }
+    }
+
+    cache.set(cacheKey, filteredTokens, 10 * 60); // Cache for 10 minutes
+    return filteredTokens;
+  } catch (error) {
+    console.error("Error fetching Ref Finance tokens:", error);
+    return {};
+  }
+}
 
 export async function getWhitelistTokens(
   account: string,
@@ -32,59 +88,81 @@ export async function getWhitelistTokens(
         .then((res) => res.data)
     : Promise.resolve([]);
 
-  const fetchTokenPricePromises = Object.keys(tokens).map((id) => {
-    return axios
-      .get(
-        `https://api.ref.finance/get-token-price?token_id=${
-          id === "near" ? "wrap.near" : id
-        }`
-      )
-      .then((res) => res.data)
-      .catch((err) => {
-        console.error(
-          `Error fetching price for token_id ${id}: ${err.message}`
-        );
-        return { price: "N/A" }; // Default value for failed fetches
-      });
-  });
+  // Fetch Ref Finance tokens
+  const refTokens = await fetchRefFinanceTokens(cache);
+
+  // Add NEAR token to the list since Ref Finance doesn't return it
+  const nearToken = {
+    near: NearTokenMetadata,
+  };
+
+  // Merge NEAR token with Ref Finance tokens
+  const allTokens: Record<string, any> = { ...nearToken, ...refTokens };
+
+  const fetchTokenPricePromises = axios
+    .get(`https://api.ref.finance/list-token-price`)
+    .then((res) => res.data)
+    .catch((err) => {
+      console.error(`Error fetching token prices: ${err.message}`);
+      return {}; // Return empty object for failed fetches
+    });
 
   // Wait for both balances and token prices to resolve
   const [userBalances, tokenPrices] = await Promise.all([
     fetchBalancesPromise,
-    Promise.all(fetchTokenPricePromises),
+    fetchTokenPricePromises,
   ]);
 
-  // Map over tokens to include only the required fields
-  const simplifiedTokens = Object.keys(tokens).map((id, index) => {
-    const token = tokens[id];
-    const priceData = tokenPrices[index];
+  const userTokenBalances = new Map<string, string>();
+  if (userBalances.tokens) {
+    userBalances.tokens.forEach((token: BalanceResp) => {
+      userTokenBalances.set(
+        token.contract_id.toLowerCase(),
+        token.balance?.toString() || "0"
+      );
+    });
+  }
+
+  // Filter tokens that have price data first
+  const tokensWithPrices: string[] = [];
+  for (const id of Object.keys(allTokens)) {
+    const priceData = tokenPrices[id === "near" ? "wrap.near" : id];
+    if (priceData?.price) {
+      tokensWithPrices.push(id);
+    }
+  }
+
+  // Map over only tokens with prices
+  const simplifiedTokens = tokensWithPrices.map((id) => {
+    const token = allTokens[id];
+    const priceData = tokenPrices[id === "near" ? "wrap.near" : id];
 
     let balance = "0";
 
     if (id === "near") {
-      balance = userBalances.state.balance;
+      balance = userBalances.state?.balance || "0";
     } else {
-      balance =
-        userBalances.tokens
-          .find((i: BalanceResp) => i.contract_id.toLowerCase() === id)
-          ?.balance?.toString() || "0";
+      balance = userTokenBalances.get(id) || "0";
     }
+
     const parsedBalance = Big(balance)
       .div(Big(10).pow(token.decimals))
       .toFixed(4);
 
     return {
       id,
-      decimals: token.decimals,
+      decimals: token.decimals || 0,
       parsedBalance,
       balance,
-      price:
-        priceData.price !== "N/A"
-          ? Big(priceData.price ?? "").toFixed(4)
-          : priceData.price,
+      price: Big(priceData.price).toFixed(),
       symbol: token.symbol,
-      name: token.name,
-      icon: id === "near" ? tokens?.[id]?.icon : token.icon,
+      name: token.name || token.symbol,
+      icon:
+        id === "near"
+          ? NearIcon
+          : id === "wrap.near"
+          ? WrapNearIcon
+          : token.icon || "",
     };
   });
 

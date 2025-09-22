@@ -43,19 +43,7 @@ jest.mock("../src/near-price");
 jest.mock("../src/ft-tokens");
 jest.mock("../src/all-token-balance-history");
 jest.mock("../src/transactions-transfer-history");
-jest.mock("../src/constants/tokens", () => ({
-  tokens: {
-    "wrap.near": {
-      decimals: 24,
-      icon: "icon-url",
-      name: "Wrapped NEAR",
-      reference: null,
-      reference_hash: null,
-      spec: "ft-1.0.0",
-      symbol: "wNEAR",
-    },
-  },
-}));
+jest.mock("../src/constants/common");
 
 describe("API Endpoints", () => {
   beforeEach(() => {
@@ -126,22 +114,6 @@ describe("API Endpoints", () => {
   });
 
   describe("GET /api/swap", () => {
-    beforeEach(() => {
-      // Mock the searchToken function
-      jest
-        .spyOn(require("../src/utils/search-token"), "searchToken")
-        .mockImplementation(async (...args: unknown[]) => {
-          const token = args[0] as string;
-          if (token === "wrap.near") {
-            return { id: "wrap.near", decimals: 24, name: "Wrapped NEAR" };
-          }
-          if (token === "usdc.near") {
-            return { id: "usdc.near", decimals: 6, name: "USD Coin" };
-          }
-          return null;
-        });
-    });
-
     it("should handle swap request with valid parameters", async () => {
       const mockSwapResult = {
         transactions: [{ type: "FunctionCall", method: "swap" }],
