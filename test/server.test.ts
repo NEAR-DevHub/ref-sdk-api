@@ -720,4 +720,207 @@ describe("API Endpoints", () => {
       expect(response.body).toEqual({}); // API returns empty object when no results
     });
   });
+
+  describe("GET /api/token-by-defuse-asset-id", () => {
+    it("should return token data for valid defuse asset ID", async () => {
+      const mockToken = {
+        defuse_asset_id: "nep141:some-other-token.near",
+        contract_address: "some-other-token.near",
+        decimals: 18,
+        blockchain: "near",
+        symbol: "SOT",
+        price: "1.50",
+        price_updated_at: "2025-09-21T10:36:30.252Z",
+        icon: "https://example.com/icon.png",
+      };
+
+      // Mock the external API response
+      axios.get = jest.fn().mockResolvedValue({
+        data: { items: [mockToken] },
+      });
+
+      const response = await request(app).get(
+        "/api/token-by-defuse-asset-id?defuseAssetId=nep141:some-other-token.near"
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveLength(1);
+      expect(response.body[0]).toMatchObject({
+        defuse_asset_id: "nep141:some-other-token.near",
+        contract_address: "some-other-token.near",
+        decimals: 18,
+        blockchain: "near",
+        symbol: "SOT", // External API data preserved since no local token exists
+        price: "1.50",
+        price_updated_at: "2025-09-21T10:36:30.252Z",
+      });
+      // Should not have local token properties since this token doesn't exist locally
+      expect(response.body[0]).not.toHaveProperty("address");
+      expect(response.body[0]).not.toHaveProperty("bridge");
+      expect(response.body[0]).not.toHaveProperty("chainName");
+      expect(response.body[0]).not.toHaveProperty("defuseAssetId");
+      expect(response.body[0]).not.toHaveProperty("name");
+    });
+
+    it("should return multiple tokens for comma-separated IDs", async () => {
+      const mockTokens = [
+        {
+          defuse_asset_id: "nep141:token1.near",
+          contract_address: "token1.near",
+          decimals: 18,
+          blockchain: "near",
+          symbol: "T1",
+          price: "2.00",
+          price_updated_at: "2025-09-21T10:36:30.252Z",
+        },
+        {
+          defuse_asset_id: "nep141:token2.near",
+          contract_address: "token2.near",
+          decimals: 6,
+          blockchain: "near",
+          symbol: "T2",
+          price: "0.50",
+          price_updated_at: "2025-09-21T10:36:30.252Z",
+        },
+      ];
+
+      axios.get = jest.fn().mockResolvedValue({
+        data: { items: mockTokens },
+      });
+
+      const response = await request(app).get(
+        "/api/token-by-defuse-asset-id?defuseAssetId=nep141:token1.near,nep141:token2.near"
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveLength(2);
+      expect(response.body[0]).toMatchObject({
+        defuse_asset_id: "nep141:token1.near",
+        contract_address: "token1.near",
+        decimals: 18,
+        blockchain: "near",
+        symbol: "T1",
+        price: "2.00",
+        price_updated_at: "2025-09-21T10:36:30.252Z",
+      });
+      expect(response.body[1]).toMatchObject({
+        defuse_asset_id: "nep141:token2.near",
+        contract_address: "token2.near",
+        decimals: 6,
+        blockchain: "near",
+        symbol: "T2",
+        price: "0.50",
+        price_updated_at: "2025-09-21T10:36:30.252Z",
+      });
+    });
+
+    it("should return 400 when defuseAssetId is missing", async () => {
+      const response = await request(app).get("/api/token-by-defuse-asset-id");
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: "defuseAssetId is required" });
+    });
+
+    it("should return error for tokens not found", async () => {
+      axios.get = jest.fn().mockResolvedValue({
+        data: { items: [] },
+      });
+
+      const response = await request(app).get(
+        "/api/token-by-defuse-asset-id?defuseAssetId=invalid-id"
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual([
+        { error: "Token not found", defuse_asset_id: "invalid-id" },
+      ]);
+    });
+
+    it("should handle external API failure gracefully", async () => {
+      axios.get = jest.fn().mockRejectedValue(new Error("API Error"));
+
+      const response = await request(app).get(
+        "/api/token-by-defuse-asset-id?defuseAssetId=nep141:some-unknown-token.near"
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual([
+        {
+          error: "Token not found",
+          defuse_asset_id: "nep141:some-unknown-token.near",
+        },
+      ]);
+    });
+  });
+
+  describe("GET /api/blockchain-by-network", () => {
+    it("should return blockchain data for valid network", async () => {
+      const response = await request(app).get(
+        "/api/blockchain-by-network?network=near"
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveLength(1);
+      expect(response.body[0]).toMatchObject({
+        name: "Near",
+        network: "near",
+        icon: expect.any(String),
+      });
+    });
+
+    it("should return multiple blockchains for comma-separated networks", async () => {
+      const response = await request(app).get(
+        "/api/blockchain-by-network?network=near,eth"
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveLength(2);
+      expect(response.body[0]).toMatchObject({ network: "near" });
+      expect(response.body[1]).toMatchObject({ network: "eth" });
+    });
+
+    it("should return 400 when network is missing", async () => {
+      const response = await request(app).get("/api/blockchain-by-network");
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: "network is required" });
+    });
+
+    it("should return error for networks not found", async () => {
+      const response = await request(app).get(
+        "/api/blockchain-by-network?network=invalid-network"
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual([
+        { error: "Blockchain not found", network: "invalid-network" },
+      ]);
+    });
+
+    it("should use dark theme when specified", async () => {
+      const response = await request(app).get(
+        "/api/blockchain-by-network?network=near&theme=dark"
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body[0]).toMatchObject({
+        name: "Near",
+        network: "near",
+        icon: expect.any(String),
+      });
+    });
+
+    it("should default to light theme when theme not specified", async () => {
+      const response = await request(app).get(
+        "/api/blockchain-by-network?network=near"
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.body[0]).toMatchObject({
+        name: "Near",
+        network: "near",
+        icon: expect.any(String),
+      });
+    });
+  });
 });

@@ -50,17 +50,20 @@ A comprehensive RESTful API service for NEAR blockchain interactions, treasury m
 ## Installation
 
 1. **Clone the repository:**
+
    ```bash
    git clone https://github.com/your-username/ref-sdk-api.git
    cd ref-sdk-api
    ```
 
 2. **Install dependencies:**
+
    ```bash
    yarn install
    ```
 
 3. **Setup environment variables:**
+
    ```bash
    cp .env.example .env
    # Edit .env with your configuration
@@ -107,6 +110,7 @@ Server runs on `http://127.0.0.1:3000` by default.
 ### Token Operations
 
 #### Get Whitelist Tokens
+
 - **Endpoint:** `GET /api/whitelist-tokens`
 - **Description:** Returns whitelisted tokens with balances and prices for a specific account
 - **Query Parameters:**
@@ -118,12 +122,13 @@ Server runs on `http://127.0.0.1:3000` by default.
   ```
 
 #### Token Swap
+
 - **Endpoint:** `GET /api/swap`
 - **Description:** Generate swap transactions for token exchanges
 - **Query Parameters:**
   - `accountId` (string, required): Account executing the swap
   - `tokenIn` (string, required): Input token contract ID
-  - `tokenOut` (string, required): Output token contract ID  
+  - `tokenOut` (string, required): Output token contract ID
   - `amountIn` (string, required): Amount of input token (in smallest units)
   - `slippage` (string, optional): Slippage tolerance (default: "0.01" for 1%)
 - **Response:** Swap transaction details and estimated output
@@ -133,6 +138,7 @@ Server runs on `http://127.0.0.1:3000` by default.
   ```
 
 #### Get NEAR Price
+
 - **Endpoint:** `GET /api/near-price`
 - **Description:** Current NEAR token price in USD with database fallback
 - **Response:** Number (price in USD)
@@ -142,6 +148,7 @@ Server runs on `http://127.0.0.1:3000` by default.
   ```
 
 #### Get FT Token Price
+
 - **Endpoint:** `GET /api/ft-token-price`
 - **Description:** Get price for a specific fungible token
 - **Query Parameters:**
@@ -153,6 +160,7 @@ Server runs on `http://127.0.0.1:3000` by default.
   ```
 
 #### Get FT Token Metadata
+
 - **Endpoint:** `GET /api/ft-token-metadata`
 - **Description:** Fetch metadata for a fungible token
 - **Query Parameters:**
@@ -164,6 +172,7 @@ Server runs on `http://127.0.0.1:3000` by default.
   ```
 
 #### Get FT Tokens
+
 - **Endpoint:** `GET /api/ft-tokens`
 - **Description:** Get all fungible tokens held by an account with metadata and USD values
 - **Query Parameters:**
@@ -174,9 +183,29 @@ Server runs on `http://127.0.0.1:3000` by default.
   GET /api/ft-tokens?account_id=example.near
   ```
 
+#### Get Token by Defuse Asset ID
+
+- **GET** `/api/token-by-defuse-asset-id?defuseAssetId={id}`
+- **Description**: Fetch token data by defuse asset ID. Supports multiple IDs separated by commas.
+- **Query Parameters**:
+  - `defuseAssetId` (required): Single ID or comma-separated list of defuse asset IDs
+- **Response**: Array of token objects with metadata, prices, and icons
+- **Example**: `/api/token-by-defuse-asset-id?defuseAssetId=nep141:wrap.near,0x123...`
+
+#### Get Blockchain by Network
+
+- **GET** `/api/blockchain-by-network?network={network}&theme={theme}`
+- **Description**: Fetch blockchain information by network identifier. Supports multiple networks separated by commas.
+- **Query Parameters**:
+  - `network` (required): Single network or comma-separated list of networks (e.g., "near", "eth", "btc")
+  - `theme` (optional): "light" or "dark" for icon theme (default: "light")
+- **Response**: Array of blockchain objects with name, icon, and network identifier
+- **Example**: `/api/blockchain-by-network?network=near,eth&theme=dark`
+
 ### Balance & History
 
 #### Get Token Balance History
+
 - **Endpoint:** `GET /api/all-token-balance-history`
 - **Description:** Historical balance data for a specific token across multiple time periods
 - **Query Parameters:**
@@ -189,6 +218,7 @@ Server runs on `http://127.0.0.1:3000` by default.
   ```
 
 #### Get Intents Balance History
+
 - **Endpoint:** `GET /api/intents-balance-history`
 - **Description:** Historical balance data for tokens held through intents contracts
 - **Query Parameters:**
@@ -202,6 +232,7 @@ Server runs on `http://127.0.0.1:3000` by default.
 ### Treasury Management
 
 #### Get Transactions Transfer History
+
 - **Endpoint:** `GET /api/transactions-transfer-history`
 - **Description:** Transfer transaction history for a treasury DAO
 - **Query Parameters:**
@@ -213,22 +244,26 @@ Server runs on `http://127.0.0.1:3000` by default.
   ```
 
 #### Store Treasuries
+
 - **Endpoint:** `GET /db/store-treasuries`
 - **Description:** Fetch and store treasury data from factory contract
 - **Response:** Success message with operation results
 
 #### Insert Treasury
+
 - **Endpoint:** `POST /db/insert-treasury`
 - **Description:** Manually insert treasury data
 - **Body:** Treasury object or array of treasury objects
 - **Response:** Operation results for each treasury
 
 #### Treasuries Report
+
 - **Endpoint:** `GET /db/treasuries-report`
 - **Description:** Generate comprehensive treasury analytics report
 - **Response:** Treasury metrics and Google Sheets update status
 
 #### Treasuries Transactions Report
+
 - **Endpoint:** `GET /db/treasuries-transactions-report`
 - **Description:** Generate treasury transaction analytics report
 - **Response:** Transaction metrics and Google Sheets update status
@@ -236,6 +271,7 @@ Server runs on `http://127.0.0.1:3000` by default.
 ### Validator Information
 
 #### Get Validators
+
 - **Endpoint:** `GET /api/validators`
 - **Description:** List of current NEAR validators with formatted fee information
 - **Response:** Array of validator objects with pool_id and fee percentage
@@ -245,6 +281,7 @@ Server runs on `http://127.0.0.1:3000` by default.
   ```
 
 #### Get Validator Details
+
 - **Endpoint:** `GET /api/validator-details`
 - **Description:** Detailed information for a specific validator
 - **Query Parameters:**
@@ -258,6 +295,7 @@ Server runs on `http://127.0.0.1:3000` by default.
 ### Search & Discovery
 
 #### Search FT Tokens
+
 - **Endpoint:** `GET /api/search-ft`
 - **Description:** Search for fungible tokens by name or symbol
 - **Query Parameters:**
@@ -269,6 +307,7 @@ Server runs on `http://127.0.0.1:3000` by default.
   ```
 
 #### Get User DAOs
+
 - **Endpoint:** `GET /api/user-daos`
 - **Description:** List of DAOs that a user is a member of
 - **Query Parameters:**
@@ -282,21 +321,23 @@ Server runs on `http://127.0.0.1:3000` by default.
 ### OneClick Treasury
 
 #### OneClick Quote
+
 - **Endpoint:** `POST /api/treasury/oneclick-quote`
 - **Description:** Generate treasury proposal for cross-chain token operations
 - **Body Parameters:**
   - `treasuryDaoID` (string, required): Treasury DAO contract ID (must end with .sputnik-dao.near)
   - `inputToken` (object, required): Input token details
-  - `outputToken` (object, required): Output token details  
+  - `outputToken` (object, required): Output token details
   - `amountIn` (string, required): Input amount
   - `slippageTolerance` (string, required): Slippage tolerance
   - `networkOut` (string, optional): Output network
 - **Response:** Formatted proposal payload for DAO submission
 - **Example:**
+
   ```http
   POST /api/treasury/oneclick-quote
   Content-Type: application/json
-  
+
   {
     "treasuryDaoID": "example.sputnik-dao.near",
     "inputToken": {"id": "wrap.near", "symbol": "WNEAR"},
@@ -311,11 +352,13 @@ Server runs on `http://127.0.0.1:3000` by default.
 ## Caching & Rate Limiting
 
 ### Caching
+
 - **NodeCache:** 2-minute TTL for most endpoints
 - **Specialized caching:** Longer TTL for validator data (7 days) and search results (1 day)
 - **RPC caching:** Request-based caching with error handling for rate limits
 
 ### Rate Limiting
+
 - **Limit:** 180 requests per 30 seconds per IP
 - **Scope:** All `/api/*` endpoints
 - **Headers:** Standard rate limit headers included in responses

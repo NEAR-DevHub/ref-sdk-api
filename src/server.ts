@@ -15,11 +15,13 @@ import {
   TransferHistoryParams,
 } from "./transactions-transfer-history";
 import prisma from "./prisma";
+import { LIST_TOKENS, BaseTokenInfo } from "./constants/intents-tokens";
 import axios from "axios";
 import treasuryRoutes from "./routes/metrics";
 import oneclickTreasuryRoutes from "./routes/oneclick-treasury";
 import cron from "node-cron";
 import { searchFT } from "./utils/lib";
+import { getBlockchainsOptions } from "./constants/intents-chains";
 
 dotenv.config();
 
@@ -408,6 +410,132 @@ app.get("/api/search-ft", async (req: Request, res: Response) => {
     console.error("Error searching FT:", error);
         
     return res.status(500).send({ error: "Failed to search FT" });
+  }
+});
+
+// Helper function to find token by defuseAssetId
+function findTokenByDefuseAssetId(defuseAssetId: string): BaseTokenInfo | null {
+  for (const token of LIST_TOKENS) {
+    if ("defuseAssetId" in token && token.defuseAssetId === defuseAssetId) {
+      return token;
+    }
+    if ("groupedTokens" in token) {
+      const foundToken = token.groupedTokens.find(
+        (t) => t.defuseAssetId === defuseAssetId
+      );
+      if (foundToken) {
+        return foundToken;
+      }
+    }
+  }
+  return null;
+}
+
+app.get(
+  "/api/token-by-defuse-asset-id",
+  async (req: Request, res: Response) => {
+    try {
+      const { defuseAssetId } = req.query;
+
+      if (!defuseAssetId || typeof defuseAssetId !== "string") {
+        return res.status(400).json({ error: "defuseAssetId is required" });
+      }
+
+      // Split by comma and trim whitespace
+      const defuseAssetIds = defuseAssetId.split(",").map((id) => id.trim());
+      const results = [];
+
+      // Fetch tokens from external API as it has prices
+      const cacheKey = "intents-chaindefuser-tokens";
+      let externalTokens = cache.get(cacheKey);
+
+      if (!externalTokens) {
+        try {
+          const response = await axios.get(
+            "https://api-mng-console.chaindefuser.com/api/tokens",
+            { timeout: 10000 }
+          );
+          externalTokens = response.data?.items || [];
+          cache.set(cacheKey, externalTokens, 5 * 60);
+          console.log(
+            `Cached ${externalTokens.length} tokens from external API`
+          );
+        } catch (apiError) {
+          console.warn("External API failed:", apiError);
+          externalTokens = [];
+        }
+      }
+
+      for (const id of defuseAssetIds) {
+        // Search in external tokens
+        let token = externalTokens?.find((t: any) => t.defuse_asset_id === id);
+
+        if (token) {
+          // Get icon from local tokens since external API doesn't provide it
+          const localToken = findTokenByDefuseAssetId(id);
+          if (localToken) {
+            token = {
+              ...token,
+              ...localToken,
+            };
+          }
+        } else {
+          // Fallback to local tokens list
+          const localToken = findTokenByDefuseAssetId(id);
+          if (localToken) {
+            token = {
+              ...localToken,
+              defuse_asset_id: localToken.defuseAssetId,
+              contract_address:
+                "address" in localToken ? localToken.address : "native",
+              decimals: localToken.decimals,
+              blockchain: localToken.chainName,
+              symbol: localToken.symbol,
+              price: null,
+              price_updated_at: null,
+              icon: localToken.icon || "",
+            };
+          }
+        }
+
+        results.push(
+          token ? token : { error: "Token not found", defuse_asset_id: id }
+        );
+      }
+
+      return res.json(results);
+    } catch (error) {
+      console.error("Error fetching tokens by defuseAssetId:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+app.get("/api/blockchain-by-network", async (req: Request, res: Response) => {
+  try {
+    const { network, theme } = req.query;
+
+    if (!network || typeof network !== "string") {
+      return res.status(400).json({ error: "network is required" });
+    }
+
+    // Split by comma and trim whitespace
+    const networks = network.split(",").map((n) => n.trim());
+    const themeParam = (theme as "light" | "dark") || "light";
+    const blockchains = getBlockchainsOptions(themeParam);
+    const results = [];
+
+    for (const net of networks) {
+      const blockchain = blockchains.find((b) => b.network === net);
+      results.push(
+        blockchain || { error: "Blockchain not found", network: net }
+      );
+    }
+
+    return res.json(results);
+  } catch (error) {
+    console.error("Error fetching blockchains by network:", error);
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 
