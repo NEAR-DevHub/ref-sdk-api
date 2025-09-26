@@ -22,6 +22,7 @@ import oneclickTreasuryRoutes from "./routes/oneclick-treasury";
 import cron from "node-cron";
 import { searchFT } from "./utils/lib";
 import { getBlockchainsOptions } from "./constants/intents-chains";
+import timezones from "./constants/timezones";
 
 dotenv.config();
 
@@ -541,6 +542,24 @@ app.get("/api/blockchain-by-network", async (req: Request, res: Response) => {
 
 app.get("/headers", (req, res) => {
   res.json({ headers: req.headers });
+});
+
+app.get("/api/timezones", async (req: Request, res: Response) => {
+  try {
+    return res.status(200).json(timezones);
+  } catch (err) {
+    console.error("Error fetching timezones:", err);
+    res.status(500).json({ error: "Failed to fetch timezones" });
+  }
+});
+
+app.get("/api/intents-tokens", async (req: Request, res: Response) => {
+  try {
+    return res.status(200).json(LIST_TOKENS);
+  } catch (err) {
+    console.error("Error fetching tokens:", err);
+    res.status(500).json({ error: "Failed to fetch tokens" });
+  }
 });
 
 // Schedule a job to clear RpcRequest and AccountBlockExistence every day at 6:30 AM UTC

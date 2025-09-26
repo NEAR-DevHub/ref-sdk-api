@@ -85,7 +85,7 @@ export const NATIVE_NEAR: TokenInfo = {
   icon: "https://s2.coinmarketcap.com/static/img/coins/128x128/6535.png",
   chainName: "near",
   bridge: "direct",
-  symbol: "NEAR",
+  symbol: "wNEAR",
   name: "Near",
 };
 
