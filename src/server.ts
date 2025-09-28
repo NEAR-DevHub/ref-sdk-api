@@ -409,7 +409,7 @@ app.get("/api/search-ft", async (req: Request, res: Response) => {
     return res.send(searchedFt);
   } catch (error) {
     console.error("Error searching FT:", error);
-        
+
     return res.status(500).send({ error: "Failed to search FT" });
   }
 });
@@ -478,6 +478,14 @@ app.get(
             token = {
               ...token,
               ...localToken,
+              chainName: localToken.chainName,
+            };
+          } else {
+            token = {
+              ...token,
+              chainName: token.blockchain,
+              asset_name: token.name || token.symbol,
+              name: token.name || token.symbol,
             };
           }
         } else {
@@ -495,12 +503,17 @@ app.get(
               price: null,
               price_updated_at: null,
               icon: localToken.icon || "",
+              chainName: localToken.chainName,
             };
           }
         }
 
         results.push(
-          token ? token : { error: "Token not found", defuse_asset_id: id }
+          token
+            ? token
+            : {
+                error: "Token not found",
+              }
         );
       }
 

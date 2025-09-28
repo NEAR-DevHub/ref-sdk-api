@@ -240,9 +240,11 @@ export async function fetchPikespeakEndpoint(endpoint: string) {
 
 // Utility function to sort by date
 export function sortByDate(items: any[]) {
-  return items.sort(
-    (a, b) => parseInt(b.timestamp, 10) - parseInt(a.timestamp, 10)
-  );
+  return items.sort((a, b) => {
+    const timestampA = BigInt(a.timestamp || 0);
+    const timestampB = BigInt(b.timestamp || 0);
+    return timestampA > timestampB ? -1 : timestampA < timestampB ? 1 : 0;
+  });
 }
 
 // Utility function to remove duplicate entries based on timestamp

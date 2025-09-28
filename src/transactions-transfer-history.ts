@@ -105,7 +105,7 @@ export async function getTransactionsTransferHistory(
     }
 
     const endIndex = requestedPage * totalTxnsPerPage;
-    return sortByDate(cachedData.slice(0, endIndex));
+    return sortByDate(cachedData).slice(0, endIndex);
   } catch (error: any) {
     console.error("Error in getTransactionsTransferHistory:", error);
 
@@ -123,7 +123,7 @@ export async function getTransactionsTransferHistory(
         const requestedPage = parseInt(params.page || "1", 10);
         const endIndex = requestedPage * totalTxnsPerPage;
         const data = fallback.data as any[];
-        return sortByDate(data.slice(0, endIndex));
+        return sortByDate(data).slice(0, endIndex);
       }
     } catch (fallbackError) {
       console.error("Failed to retrieve fallback cached data:", fallbackError);
