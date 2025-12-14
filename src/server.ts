@@ -19,7 +19,6 @@ import { LIST_TOKENS, BaseTokenInfo } from "./constants/intents-tokens";
 import axios from "axios";
 import treasuryRoutes from "./routes/metrics";
 import oneclickTreasuryRoutes from "./routes/oneclick-treasury";
-import cron from "node-cron";
 import { searchFT } from "./utils/lib";
 import { getBlockchainsOptions } from "./constants/intents-chains";
 import timezones from "./constants/timezones";
@@ -575,32 +574,27 @@ app.get("/api/intents-tokens", async (req: Request, res: Response) => {
   }
 });
 
-// Schedule a job to clear RpcRequest and AccountBlockExistence every day at 6:30 AM UTC
-let cleanupJob: any = null;
+// Clears RpcRequest and AccountBlockExistence tables
+app.post("/api/internal/cleanup", async (req: Request, res: Response) => {
+  try {
+    const deletedRpc = await prisma.rpcRequest.deleteMany();
+    const deletedAccountBlock = await prisma.accountBlockExistence.deleteMany();
 
-if (process.env.NODE_ENV !== "test") {
-  cleanupJob = cron.schedule(
-    "30 6 * * *",
-    async () => {
-      try {
-        const deletedRpc = await prisma.rpcRequest.deleteMany();
-        const deletedAccountBlock =
-          await prisma.accountBlockExistence.deleteMany();
-        console.log(
-          `[CRON] Cleared RpcRequest table: ${deletedRpc.count} rows deleted`
-        );
-        console.log(
-          `[CRON] Cleared AccountBlockExistence table: ${deletedAccountBlock.count} rows deleted`
-        );
-      } catch (error) {
-        console.error("[CRON] Error clearing tables:", error);
-      }
-    },
-    {
-      timezone: "UTC",
-    }
-  );
-}
+    console.log(`[CLEANUP] Cleared RpcRequest table: ${deletedRpc.count} rows deleted`);
+    console.log(`[CLEANUP] Cleared AccountBlockExistence table: ${deletedAccountBlock.count} rows deleted`);
+
+    return res.json({
+      success: true,
+      deleted: {
+        rpcRequest: deletedRpc.count,
+        accountBlockExistence: deletedAccountBlock.count,
+      },
+    });
+  } catch (error) {
+    console.error("[CLEANUP] Error clearing tables:", error);
+    return res.status(500).json({ error: "Failed to cleanup tables" });
+  }
+});
 
 // Start the server
 if (process.env.NODE_ENV !== "test") {
