@@ -2,6 +2,7 @@ import express, { Request, Response } from "express";
 import axios from "axios";
 import prisma from "../prisma";
 import {
+  updateDashboardSheet,
   updateReportSheet,
   updateTransactionsReportSheet,
 } from "../utils/google-sheet";
@@ -122,7 +123,7 @@ async function insertTreasuryToDb({
 const fetchNearBalances = async (account_id: string) => {
   try {
     const { data } = await axios.get(
-      `https://ref-sdk-test-cold-haze-1300-2.fly.dev/api/all-token-balance-history`,
+      `https://ref-sdk-api-2.fly.dev/api/all-token-balance-history`,
       {
         params: { account_id, token_id: "near" },
       }
@@ -137,7 +138,7 @@ const fetchNearBalances = async (account_id: string) => {
 const fetchFTBalances = async (account_id: string) => {
   try {
     const { data } = await axios.get(
-      `https://ref-sdk-test-cold-haze-1300-2.fly.dev/api/ft-tokens`,
+      `https://ref-sdk-api-2.fly.dev/api/ft-tokens`,
       {
         params: { account_id },
       }
@@ -324,12 +325,204 @@ async function getTreasuiresForReport() {
   }
 }
 
+function decodeUint8Array(uint8Array: number[]) {
+  const string = String.fromCharCode(...uint8Array);
+  return JSON.parse(string);
+}
+
+async function getFTLockedBalance(ftContracts: string[], daoAccount: string) {
+  if (!ftContracts || ftContracts.length === 0) {
+    return {
+      formattedString: "-",
+      totalUSD: 0,
+    };
+  }
+  try {
+    const balances = await Promise.all(
+      ftContracts.map(async (contract) => {
+        // Fetch account-specific FT data
+        const accountMetadataResp = await fetchFromRPC(
+          {
+            jsonrpc: "2.0",
+            id: "dontcare",
+            method: "query",
+            params: {
+              request_type: "call_function",
+              finality: "final",
+              account_id: contract,
+              method_name: "get_account",
+              args_base64: Buffer.from(
+                JSON.stringify({ account_id: daoAccount })
+              ).toString("base64"),
+            },
+          },
+          false
+        );
+
+        // Fetch contract metadata
+        const contractMetadataResp = await fetchFromRPC(
+          {
+            jsonrpc: "2.0",
+            id: "dontcare",
+            method: "query",
+            params: {
+              request_type: "call_function",
+              finality: "final",
+              account_id: contract,
+              method_name: "contract_metadata",
+              args_base64: "",
+            },
+          },
+          false
+        );
+        const contractMetadata = decodeUint8Array(
+          contractMetadataResp.result.result
+        );
+        const ftMetadata = await getTokenMetadata(
+          contractMetadata.token_account_id
+        );
+        const accountMetadata = decodeUint8Array(
+          accountMetadataResp.result.result
+        );
+
+        const remainingTokens = Big(accountMetadata?.session_num ?? 0)
+          .mul(accountMetadata?.release_per_session ?? 0)
+          .minus(accountMetadata?.claimed_amount ?? 0)
+          .div(Big(10).pow(ftMetadata?.decimals));
+
+        const usdValue = remainingTokens.mul(ftMetadata?.price ?? 0);
+
+        return {
+          symbol: ftMetadata?.symbol,
+          amount: remainingTokens,
+          usdValue,
+        };
+      })
+    );
+
+    // Format string for the sheet
+    const formattedString = balances
+      .map(
+        (b) =>
+          `Token: ${
+            b.symbol
+          } | Amount: ${b.amount.toFixed()} | USD Value: $${b.usdValue.toFixed(
+            2
+          )}`
+      )
+      .join("\n");
+
+    // Sum total USD
+    const totalUSD = balances.reduce((acc, b) => acc.plus(b.usdValue), Big(0));
+
+    return {
+      formattedString: formattedString || "-",
+      totalUSD: totalUSD.toNumber(),
+    };
+  } catch (error) {
+    console.error(`Error fetching FT locked balance for ${daoAccount}`, error);
+    return { formattedString: "-", totalUSD: 0 };
+  }
+}
+
+async function getIntentsBalance(daoAccount: string) {
+  try {
+    const { data: tokensResponse } = await axios.get(
+      "https://api-mng-console.chaindefuser.com/api/tokens"
+    );
+
+    if (!tokensResponse?.items || tokensResponse.items.length === 0) {
+      return { formattedString: "-", totalUSD: 0 };
+    }
+
+    const initialTokens = tokensResponse.items;
+    const tokenIds = initialTokens.map((t: any) => t.defuse_asset_id);
+
+    const balancesResp = await fetchFromRPC(
+      {
+        jsonrpc: "2.0",
+        id: "dontcare",
+        method: "query",
+        params: {
+          request_type: "call_function",
+          finality: "final",
+          account_id: "intents.near",
+          method_name: "mt_batch_balance_of",
+          args_base64: Buffer.from(
+            JSON.stringify({
+              account_id: daoAccount,
+              token_ids: tokenIds,
+            })
+          ).toString("base64"),
+        },
+      },
+      false
+    );
+
+    if (!balancesResp?.result?.result) {
+      console.error("Failed to fetch balances from intents.near");
+      return { formattedString: "-", totalUSD: 0 };
+    }
+
+    const balances = decodeUint8Array(balancesResp.result.result);
+
+    // Map tokens with balances
+    const tokensWithBalances = initialTokens.map((token: any, i: number) => ({
+      ...token,
+      amount: balances[i] || "0",
+    }));
+
+    const filteredTokens = tokensWithBalances.filter(
+      (token: any) => token.amount && Big(token.amount).gt(0)
+    );
+
+    if (filteredTokens.length === 0) {
+      return { formattedString: "-", totalUSD: 0 };
+    }
+
+    const tokensWithMetadata = await Promise.all(
+      filteredTokens.map(async (token: any) => ({
+        ...token,
+        usdValue: Big(token.amount)
+          .div(Big(10).pow(token.decimals || 0))
+          .mul(token.price || 0)
+          .toFixed(),
+      }))
+    );
+
+    // Format each token on a new line
+    const formattedString = tokensWithMetadata
+      .map((token: any) => {
+        const amount = Big(token.amount).div(Big(10).pow(token.decimals || 0));
+        const usdValue = Big(token.usdValue);
+        return `Token: ${
+          token.symbol || token.name
+        } | Amount: ${amount.toFixed()} | USD Value: $${usdValue.toFixed(2)}`;
+      })
+      .join("\n");
+
+    // Total USD value
+    const totalUSD = tokensWithMetadata.reduce(
+      (acc: Big, token: any) => acc.plus(Big(token.usdValue)),
+      Big(0)
+    );
+
+    return {
+      formattedString: formattedString || "-",
+      totalUSD: totalUSD.toNumber(),
+    };
+  } catch (error) {
+    console.error("Error fetching intents balance:", error);
+    return { formattedString: "-", totalUSD: 0 };
+  }
+}
+
 router.get("/db/treasuries-report", async (_req, res) => {
   try {
     const treasuries = await getTreasuiresForReport();
 
     const { data: nearPriceResp } = await axios.get(
-      "https://ref-sdk-test-cold-haze-1300-2.fly.dev/api/near-price"
+      "https://ref-sdk-api-2.fly.dev/api/near-price"
     );
     const nearPrice = Big(nearPriceResp || 0);
 
@@ -360,10 +553,18 @@ router.get("/db/treasuries-report", async (_req, res) => {
             treasury.lockupContract
               ? fetchNearBalances(treasury.lockupContract)
               : Promise.resolve(null),
+            getFTLockedBalance(treasury.ftLockedContracts, treasury.daoAccount),
+            getIntentsBalance(treasury.daoAccount),
           ];
 
-          const [ftBalance, nearBalanceResp, policyResp, lockupBalanceResp] =
-            await Promise.all(promises);
+          const [
+            ftBalance,
+            nearBalanceResp,
+            policyResp,
+            lockupBalanceResp,
+            ftLockups,
+            intentsBalance,
+          ] = await Promise.all(promises);
 
           const nearAmount = Big(
             nearBalanceResp?.["1H"]?.[nearBalanceResp?.["1H"]?.length - 1]
@@ -375,7 +576,10 @@ router.get("/db/treasuries-report", async (_req, res) => {
 
           const totalAssetsUSD = ftAssetsUSD.plus(nearUSD);
           daoBalance = daoBalance.plus(totalAssetsUSD);
+
           totalAssets = totalAssets.plus(totalAssetsUSD);
+          totalAssets = totalAssets.plus(ftLockups.totalUSD);
+          totalAssets = totalAssets.plus(intentsBalance.totalUSD);
 
           const usdcToken = (ftBalance?.fts ?? []).find(
             (i: FtToken) =>
@@ -396,15 +600,39 @@ router.get("/db/treasuries-report", async (_req, res) => {
               i.contract !==
                 "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1"
           );
-          const otherTokensTotal = otherTokens.reduce(
-            (acc: any, token: FtToken) => {
-              const parsedAmount = getParsedTokenAmount(token);
-              return acc.plus(parsedAmount);
-            },
+
+          const otherTokensWithUSD = otherTokens
+            .map((token: FtToken) => {
+              const amount = getParsedTokenAmount(token); // your existing function
+              const usdValue = Big(amount).mul(token.ft_meta.price || 0);
+              return {
+                token,
+                amount,
+                usdValue,
+              };
+            })
+            .filter((t: any) => t.usdValue.gt(1)); // only keep tokens with USD > 1
+
+          // Format as string: "Token: SYMBOL | Amount: X | USD Value: $Y"
+          const otherTokensFormatted = otherTokensWithUSD
+            .map(
+              (t: any) =>
+                `Token: ${
+                  t.token.ft_meta.symbol || t.token.ft_meta.name
+                } | Amount: ${t.amount.toFixed()} | USD Value: $${t.usdValue.toFixed(
+                  2
+                )}`
+            )
+            .join("\n");
+
+          // Total USD value of all included tokens
+          const otherTokensTotalUSD = otherTokensWithUSD.reduce(
+            (acc: any, t: any) => acc.plus(t.usdValue),
             Big(0)
           );
 
-          const otherAmount = Number(otherTokensTotal.toFixed());
+          const otherAmountFormatted = otherTokensFormatted || "-";
+          const otherTotalUSD = otherTokensTotalUSD.toNumber();
 
           const rawPolicyString =
             policyResp?.result?.result
@@ -443,7 +671,12 @@ router.get("/db/treasuries-report", async (_req, res) => {
             nearAmount: Number(nearAmount.toFixed()),
             usdcAmount,
             usdtAmount,
-            otherAmount,
+            ftTokens: otherAmountFormatted,
+            ftTokensUSD: otherTotalUSD,
+            ftLockups: ftLockups.formattedString,
+            ftLockupsUSD: ftLockups.totalUSD,
+            intentsTokens: intentsBalance.formattedString,
+            intentsTotalUSD: intentsBalance.totalUSD,
           };
         } catch (error) {
           console.warn(`⚠️ Skipping treasury ${treasury.name}:`, error);
@@ -462,7 +695,7 @@ router.get("/db/treasuries-report", async (_req, res) => {
 });
 
 // time for transactions report
-const startTime = 1749031920000000000;
+const startTime = 1753986600000000000;
 
 async function getTokenMetadata(tokenId: string) {
   const { data: meta } = await axios.get(
@@ -471,15 +704,26 @@ async function getTokenMetadata(tokenId: string) {
   return meta;
 }
 
-async function getTokenAmountInUSD(tokenId: string, rawAmount: string) {
+async function getTokenAmountInUSD(
+  tokenId: string,
+  rawAmount: string,
+  isParsedAmount: boolean = false
+) {
   const actualTokenId = tokenId?.trim() || "near";
   const meta = await getTokenMetadata(actualTokenId);
 
-  const amount = Big(rawAmount).div(Big(10).pow(meta.decimals));
-  const usdValue = amount.times(meta.price);
+  const amount = isParsedAmount
+    ? Big(rawAmount)
+    : Big(rawAmount).div(Big(10).pow(meta.decimals));
+
+  // Ensure price is a Big number and default to 0 if missing
+  const price = meta.price ? Big(meta.price) : Big(0);
+
+  const usdValue = amount.times(price);
+
   return {
-    amount: amount,
-    usdValue: usdValue,
+    amount,
+    usdValue,
     symbol: actualTokenId === "near" ? "NEAR" : meta.symbol,
   };
 }
@@ -489,11 +733,12 @@ async function getPaymentStats(daoAccount: string): Promise<{
   tokenTotals: Record<string, { amount: Big; usdValue: Big }>;
 }> {
   try {
-    const { data: proposals }: { data: TransferProposal[] } = await axios.get(
-      `https://sputnik-indexer-divine-fog-3863.fly.dev/proposals/${daoAccount}?proposal_type=Transfer&keyword=title`
-    );
+    const { data: proposals }: { data: { proposals: TransferProposal[] } } =
+      await axios.get(
+        `https://sputnik-indexer.fly.dev/proposals/${daoAccount}?category=payments`
+      );
 
-    const filtered = proposals.filter((p) =>
+    const filtered = proposals.proposals.filter((p: TransferProposal) =>
       Big(p.submission_time).gt(startTime)
     );
 
@@ -539,12 +784,12 @@ async function getStakeStats(daoAccount: string): Promise<{
 }> {
   let stakeProposalsCount = 0;
   try {
-    const { data: proposals }: { data: FunctionCallProposal[] } =
+    const { data: proposals }: { data: { proposals: FunctionCallProposal[] } } =
       await axios.get(
-        `https://sputnik-indexer-divine-fog-3863.fly.dev/proposals/${daoAccount}?proposal_type=FunctionCall&keyword=stake`
+        `https://sputnik-indexer.fly.dev/proposals/${daoAccount}?category=stake-delegation`
       );
 
-    const filtered = proposals.filter((p) =>
+    const filtered = proposals.proposals.filter((p: FunctionCallProposal) =>
       Big(p.submission_time).gt(startTime)
     );
 
@@ -603,12 +848,11 @@ async function getAssetExchangeStats(daoAccount: string): Promise<{
 }> {
   try {
     let exchangeProposalsCount = 0;
-    const { data: proposals }: { data: FunctionCallProposal[] } =
+    const { data: proposals }: { data: { proposals: FunctionCallProposal[] } } =
       await axios.get(
-        `https://sputnik-indexer-divine-fog-3863.fly.dev/proposals/${daoAccount}?proposal_type=FunctionCall&keyword=asset-exchange`
+        `https://sputnik-indexer.fly.dev/proposals/${daoAccount}?category=asset-exchange`
       );
-
-    const filtered = proposals.filter((p) =>
+    const filtered = proposals.proposals.filter((p: FunctionCallProposal) =>
       Big(p.submission_time).gt(startTime)
     );
 
@@ -631,8 +875,16 @@ async function getAssetExchangeStats(daoAccount: string): Promise<{
       const amountIn = Big(amountInMatch[1]);
       const amountOut = Big(amountOutMatch[1]);
       exchangeProposalsCount++;
-      const inUSD = await getTokenAmountInUSD(tokenIn, amountIn.toFixed());
-      const outUSD = await getTokenAmountInUSD(tokenOut, amountOut.toFixed());
+      const inUSD = await getTokenAmountInUSD(
+        tokenIn,
+        amountIn.toFixed(),
+        true
+      );
+      const outUSD = await getTokenAmountInUSD(
+        tokenOut,
+        amountOut.toFixed(),
+        true
+      );
 
       totalExchangeValueUSD = totalExchangeValueUSD
         .plus(inUSD.usdValue)
@@ -670,12 +922,12 @@ async function getLockupStats(daoAccount: string): Promise<{
 }> {
   try {
     let lockupProposalsCount = 0;
-    const { data: proposals }: { data: FunctionCallProposal[] } =
+    const { data: proposals }: { data: { proposals: FunctionCallProposal[] } } =
       await axios.get(
-        `https://sputnik-indexer-divine-fog-3863.fly.dev/proposals/${daoAccount}?proposal_type=FunctionCall&keyword=lockup`
+        `https://sputnik-indexer.fly.dev/proposals/${daoAccount}?category=lockup`
       );
 
-    const filtered = proposals.filter((p) =>
+    const filtered = proposals.proposals.filter((p: FunctionCallProposal) =>
       Big(p.submission_time).gt(startTime)
     );
 
@@ -778,4 +1030,13 @@ router.get("/db/treasuries-transactions-report", async (_req, res) => {
   }
 });
 
+router.get("/db/treasuries-insights", async (_req, res) => {
+  try {
+    const insights = await updateDashboardSheet();
+    return res.status(200).json(insights);
+  } catch (err) {
+    console.error("Error generating insights:", err);
+    res.status(500).json({ error: "Failed to generate insights" });
+  }
+});
 export default router;
